@@ -1,4 +1,5 @@
 """ABL eMS Home integration."""
+
 from __future__ import annotations
 
 import logging
@@ -27,9 +28,9 @@ PLATFORMS = ["sensor", "select"]
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Set up ABL eMS Home from a config entry."""
-    host     = entry.data[CONF_HOST]
+    host = entry.data[CONF_HOST]
     password = entry.data[CONF_PASSWORD]
-    port     = entry.data.get(CONF_PORT, DEFAULT_PORT)
+    port = entry.data.get(CONF_PORT, DEFAULT_PORT)
     interval = entry.options.get(
         CONF_SCAN_INTERVAL,
         entry.data.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL),
@@ -66,7 +67,9 @@ async def _async_update_listener(hass: HomeAssistant, entry: ConfigEntry) -> Non
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
-    coordinator: ABLEMSHomeCoordinator = hass.data[DOMAIN][entry.entry_id][DATA_COORDINATOR]
+    coordinator: ABLEMSHomeCoordinator = hass.data[DOMAIN][entry.entry_id][
+        DATA_COORDINATOR
+    ]
     await coordinator.async_stop_websocket()
 
     unload_ok = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)

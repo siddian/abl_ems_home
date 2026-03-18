@@ -1,4 +1,5 @@
 """Sensor platform for ABL eMS Home."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -28,6 +29,7 @@ from .coordinator import ABLEMSHomeCoordinator, ABLEMSHomeData
 @dataclass
 class ABLSensorEntityDescription(SensorEntityDescription):
     """Extends SensorEntityDescription with a value extractor."""
+
     value_fn: Callable[[ABLEMSHomeData], float | int | str | None] = lambda _: None
 
 
@@ -40,7 +42,9 @@ SENSOR_DESCRIPTIONS: tuple[ABLSensorEntityDescription, ...] = (
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
         icon="mdi:ev-station",
-        value_fn=lambda d: round(d.emobility_state.ev_charging_power.total / 1_000_000, 3),
+        value_fn=lambda d: round(
+            d.emobility_state.ev_charging_power.total / 1_000_000, 3
+        ),
     ),
     ABLSensorEntityDescription(
         key="ev_charging_power_l1",
@@ -80,7 +84,9 @@ SENSOR_DESCRIPTIONS: tuple[ABLSensorEntityDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         icon="mdi:transmission-tower-off",
         entity_registry_enabled_default=False,
-        value_fn=lambda d: round(d.emobility_state.curtailment_setpoint.total / 1_000_000, 3),
+        value_fn=lambda d: round(
+            d.emobility_state.curtailment_setpoint.total / 1_000_000, 3
+        ),
     ),
     # ── smart meter (WebSocket, real-time) ───────────────────────────────────
     # SmartMeterReading stores power in W (raw mW already divided by 1000).
@@ -93,7 +99,9 @@ SENSOR_DESCRIPTIONS: tuple[ABLSensorEntityDescription, ...] = (
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
         icon="mdi:transmission-tower",
-        value_fn=lambda d: round(d.smart_meter.power_total / 1000, 3) if d.smart_meter else None,
+        value_fn=lambda d: (
+            round(d.smart_meter.power_total / 1000, 3) if d.smart_meter else None
+        ),
     ),
     ABLSensorEntityDescription(
         key="grid_power_l1",
@@ -103,7 +111,9 @@ SENSOR_DESCRIPTIONS: tuple[ABLSensorEntityDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         icon="mdi:lightning-bolt",
         entity_registry_enabled_default=False,
-        value_fn=lambda d: round(d.smart_meter.power_l1 / 1000, 3) if d.smart_meter else None,
+        value_fn=lambda d: (
+            round(d.smart_meter.power_l1 / 1000, 3) if d.smart_meter else None
+        ),
     ),
     ABLSensorEntityDescription(
         key="grid_power_l2",
@@ -113,7 +123,9 @@ SENSOR_DESCRIPTIONS: tuple[ABLSensorEntityDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         icon="mdi:lightning-bolt",
         entity_registry_enabled_default=False,
-        value_fn=lambda d: round(d.smart_meter.power_l2 / 1000, 3) if d.smart_meter else None,
+        value_fn=lambda d: (
+            round(d.smart_meter.power_l2 / 1000, 3) if d.smart_meter else None
+        ),
     ),
     ABLSensorEntityDescription(
         key="grid_power_l3",
@@ -123,7 +135,9 @@ SENSOR_DESCRIPTIONS: tuple[ABLSensorEntityDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         icon="mdi:lightning-bolt",
         entity_registry_enabled_default=False,
-        value_fn=lambda d: round(d.smart_meter.power_l3 / 1000, 3) if d.smart_meter else None,
+        value_fn=lambda d: (
+            round(d.smart_meter.power_l3 / 1000, 3) if d.smart_meter else None
+        ),
     ),
     ABLSensorEntityDescription(
         key="grid_apparent_power_total",
@@ -132,7 +146,9 @@ SENSOR_DESCRIPTIONS: tuple[ABLSensorEntityDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         icon="mdi:transmission-tower",
         entity_registry_enabled_default=False,
-        value_fn=lambda d: round(d.smart_meter.power_apparent / 1000, 3) if d.smart_meter else None,
+        value_fn=lambda d: (
+            round(d.smart_meter.power_apparent / 1000, 3) if d.smart_meter else None
+        ),
     ),
     ABLSensorEntityDescription(
         key="grid_voltage_l1",
@@ -141,7 +157,9 @@ SENSOR_DESCRIPTIONS: tuple[ABLSensorEntityDescription, ...] = (
         device_class=SensorDeviceClass.VOLTAGE,
         state_class=SensorStateClass.MEASUREMENT,
         entity_registry_enabled_default=False,
-        value_fn=lambda d: round(d.smart_meter.voltage_l1, 2) if d.smart_meter else None,
+        value_fn=lambda d: (
+            round(d.smart_meter.voltage_l1, 2) if d.smart_meter else None
+        ),
     ),
     ABLSensorEntityDescription(
         key="grid_voltage_l2",
@@ -150,7 +168,9 @@ SENSOR_DESCRIPTIONS: tuple[ABLSensorEntityDescription, ...] = (
         device_class=SensorDeviceClass.VOLTAGE,
         state_class=SensorStateClass.MEASUREMENT,
         entity_registry_enabled_default=False,
-        value_fn=lambda d: round(d.smart_meter.voltage_l2, 2) if d.smart_meter else None,
+        value_fn=lambda d: (
+            round(d.smart_meter.voltage_l2, 2) if d.smart_meter else None
+        ),
     ),
     ABLSensorEntityDescription(
         key="grid_voltage_l3",
@@ -159,7 +179,9 @@ SENSOR_DESCRIPTIONS: tuple[ABLSensorEntityDescription, ...] = (
         device_class=SensorDeviceClass.VOLTAGE,
         state_class=SensorStateClass.MEASUREMENT,
         entity_registry_enabled_default=False,
-        value_fn=lambda d: round(d.smart_meter.voltage_l3, 2) if d.smart_meter else None,
+        value_fn=lambda d: (
+            round(d.smart_meter.voltage_l3, 2) if d.smart_meter else None
+        ),
     ),
     ABLSensorEntityDescription(
         key="grid_current_l1",
@@ -167,7 +189,9 @@ SENSOR_DESCRIPTIONS: tuple[ABLSensorEntityDescription, ...] = (
         native_unit_of_measurement="A",
         device_class=SensorDeviceClass.CURRENT,
         state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda d: round(d.smart_meter.current_l1, 3) if d.smart_meter else None,
+        value_fn=lambda d: (
+            round(d.smart_meter.current_l1, 3) if d.smart_meter else None
+        ),
     ),
     ABLSensorEntityDescription(
         key="grid_current_l2",
@@ -175,7 +199,9 @@ SENSOR_DESCRIPTIONS: tuple[ABLSensorEntityDescription, ...] = (
         native_unit_of_measurement="A",
         device_class=SensorDeviceClass.CURRENT,
         state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda d: round(d.smart_meter.current_l2, 3) if d.smart_meter else None,
+        value_fn=lambda d: (
+            round(d.smart_meter.current_l2, 3) if d.smart_meter else None
+        ),
     ),
     ABLSensorEntityDescription(
         key="grid_current_l3",
@@ -183,7 +209,9 @@ SENSOR_DESCRIPTIONS: tuple[ABLSensorEntityDescription, ...] = (
         native_unit_of_measurement="A",
         device_class=SensorDeviceClass.CURRENT,
         state_class=SensorStateClass.MEASUREMENT,
-        value_fn=lambda d: round(d.smart_meter.current_l3, 3) if d.smart_meter else None,
+        value_fn=lambda d: (
+            round(d.smart_meter.current_l3, 3) if d.smart_meter else None
+        ),
     ),
     ABLSensorEntityDescription(
         key="grid_frequency",
@@ -201,7 +229,9 @@ SENSOR_DESCRIPTIONS: tuple[ABLSensorEntityDescription, ...] = (
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
         icon="mdi:meter-electric",
-        value_fn=lambda d: round(d.smart_meter.energy_total, 3) if d.smart_meter else None,
+        value_fn=lambda d: (
+            round(d.smart_meter.energy_total, 3) if d.smart_meter else None
+        ),
     ),
     # ── EV charging state ────────────────────────────────────────────────────
     ABLSensorEntityDescription(
@@ -209,9 +239,9 @@ SENSOR_DESCRIPTIONS: tuple[ABLSensorEntityDescription, ...] = (
         name="EV Charging State",
         icon="mdi:ev-station",
         value_fn=lambda d: (
-            "locked"   if d.charge_mode.mode == "lock" else
-            "charging" if d.emobility_state.ev_charging_power.total > 0 else
-            "idle"
+            "locked"
+            if d.charge_mode.mode == "lock"
+            else "charging" if d.emobility_state.ev_charging_power.total > 0 else "idle"
         ),
     ),
     # ── charge mode ──────────────────────────────────────────────────────────
@@ -281,7 +311,9 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up ABL eMS Home sensors."""
-    coordinator: ABLEMSHomeCoordinator = hass.data[DOMAIN][entry.entry_id][DATA_COORDINATOR]
+    coordinator: ABLEMSHomeCoordinator = hass.data[DOMAIN][entry.entry_id][
+        DATA_COORDINATOR
+    ]
 
     async_add_entities(
         ABLEMSHomeSensor(coordinator, entry, description)

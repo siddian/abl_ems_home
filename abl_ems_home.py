@@ -6,11 +6,11 @@ system and its connected eMH1 wallboxes.
 
 Two communication layers are supported:
 
-1. **HTTP layer** – the eMS Home exposes a local web interface (accessible
+1. **HTTP layer** - the eMS Home exposes a local web interface (accessible
    by IP address on your LAN).  Use ``EMSHomeHTTP`` to authenticate, read
    the dashboard / system data and change configuration through the web UI.
 
-2. **Modbus ASCII layer** – the eMH1 wallboxes speak Modbus ASCII over
+2. **Modbus ASCII layer** - the eMH1 wallboxes speak Modbus ASCII over
    RS485 (38400 Bd, 8E1).  Use ``EMH1ModbusASCII`` to talk directly to
    individual wallboxes.  You can reach the RS485 bus either through:
    - a local serial port / USB-RS485 adapter  (``serial://`` transport)
@@ -52,22 +52,24 @@ from __future__ import annotations
 import socket
 import struct
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import IntEnum
 from typing import Optional
 
 # ---------------------------------------------------------------------------
-# Optional imports – graceful degradation when packages are not installed
+# Optional imports - graceful degradation when packages are not installed
 # ---------------------------------------------------------------------------
 try:
     import requests
     from requests import Session
+
     _HAS_REQUESTS = True
 except ImportError:
     _HAS_REQUESTS = False
 
 try:
     import serial as _serial
+
     _HAS_SERIAL = True
 except ImportError:
     _HAS_SERIAL = False
@@ -77,8 +79,10 @@ except ImportError:
 # Data classes / enumerations
 # ===========================================================================
 
+
 class ChargeState(IntEnum):
     """IEC 61851 / SAE J1772 charging states reported by the EVCC."""
+
     A1 = 0xA1  # No EV connected, outlet enabled
     A2 = 0xA2  # No EV connected, outlet disabled
     B1 = 0xB1  # EV connected, no charging request
@@ -107,9 +111,10 @@ class FirmwareInfo:
 @dataclass
 class CurrentReading:
     """Per-phase current readings from an eMH1 wallbox."""
+
     device_id: int
     state: ChargeState
-    max_current_amps: int      # Icmax currently set
+    max_current_amps: int  # Icmax currently set
     phase1_amps: int
     phase2_amps: int
     phase3_amps: int
@@ -117,21 +122,24 @@ class CurrentReading:
     @property
     def total_power_kw(self) -> float:
         """Approximate 3-phase power in kW (assumes 230 V per phase)."""
-        return round((self.phase1_amps + self.phase2_amps + self.phase3_amps) * 230 / 1000, 2)
+        return round(
+            (self.phase1_amps + self.phase2_amps + self.phase3_amps) * 230 / 1000, 2
+        )
 
 
 @dataclass
 class DeviceStatus:
     """System health snapshot from ``/api/device-settings/devicestatus``."""
-    status: str          # e.g. "idle", "charging"
-    cpu_load: int        # percent
-    cpu_temp: int        # °C
-    ram_free: int        # bytes
-    ram_total: int       # bytes
+
+    status: str  # e.g. "idle", "charging"
+    cpu_load: int  # percent
+    cpu_temp: int  # °C
+    ram_free: int  # bytes
+    ram_total: int  # bytes
     flash_app_free: int  # bytes
-    flash_app_total: int # bytes
+    flash_app_total: int  # bytes
     flash_data_free: int  # bytes
-    flash_data_total: int # bytes
+    flash_data_total: int  # bytes
 
     @property
     def ram_used_pct(self) -> float:
@@ -173,6 +181,7 @@ class SystemFlags:
 @dataclass
 class PhaseValues:
     """A measurement broken down across three phases plus a total."""
+
     total: float
     l1: float
     l2: float
@@ -202,6 +211,7 @@ class EMobilityState:
     overload_protection_active : bool
         True when the overload protection limiter is actively curtailing.
     """
+
     ev_charging_power: PhaseValues
     curtailment_setpoint: PhaseValues
     overload_protection_active: bool
@@ -225,7 +235,9 @@ class EMobilityState:
     def from_dict(cls, d: dict) -> "EMobilityState":
         return cls(
             ev_charging_power=PhaseValues.from_dict(d.get("EvChargingPower", {})),
-            curtailment_setpoint=PhaseValues.from_dict(d.get("CurtailmentSetpoint", {})),
+            curtailment_setpoint=PhaseValues.from_dict(
+                d.get("CurtailmentSetpoint", {})
+            ),
             overload_protection_active=d.get("OverloadProtectionActive", False),
         )
 
@@ -235,11 +247,12 @@ class ChargeMode(str):
     Known charge-mode strings used by the eMS Home firmware.
     Use as plain strings or compare against these constants.
     """
-    GRID   = "grid"    # Charge at full grid power          ✓ confirmed
-    LOCK   = "lock"   # No charging                        ✓ confirmed
-    PV     = "pv"     # PV-surplus only charging           ✓ confirmed
-    HYBRID = "hybrid" # PV-surplus + grid top-up           ✓ confirmed
-    MIN    = "min"    # Minimum charging power (unconfirmed)
+
+    GRID = "grid"  # Charge at full grid power          ✓ confirmed
+    LOCK = "lock"  # No charging                        ✓ confirmed
+    PV = "pv"  # PV-surplus only charging           ✓ confirmed
+    HYBRID = "hybrid"  # PV-surplus + grid top-up           ✓ confirmed
+    MIN = "min"  # Minimum charging power (unconfirmed)
 
 
 @dataclass
@@ -260,6 +273,7 @@ class ChargeModeConfig:
     last_min_pv_power_quota : int
         Previous value of ``min_pv_power_quota`` (retained by firmware).
     """
+
     mode: str
     min_charging_power_quota: int
     min_pv_power_quota: int
@@ -308,9 +322,10 @@ class EVParameters:
 
     Each connected EV is keyed by a UUID assigned by the eMS Home firmware.
     """
+
     uuid: str
-    min_current: float        # A
-    max_current: float        # A
+    min_current: float  # A
+    max_current: float  # A
     phases_total: bool
     phase_l1: bool
     phase_l2: bool
@@ -320,9 +335,15 @@ class EVParameters:
     @property
     def active_phases(self) -> list[str]:
         """List of active phase labels, e.g. ['L1', 'L3']."""
-        return [p for p, active in [("L1", self.phase_l1),
-                                    ("L2", self.phase_l2),
-                                    ("L3", self.phase_l3)] if active]
+        return [
+            p
+            for p, active in [
+                ("L1", self.phase_l1),
+                ("L2", self.phase_l2),
+                ("L3", self.phase_l3),
+            ]
+            if active
+        ]
 
     @classmethod
     def from_dict(cls, uuid: str, d: dict) -> "EVParameters":
@@ -343,15 +364,24 @@ class EVParameters:
 # Modbus ASCII helpers
 # ===========================================================================
 
+
 def _lrc(data: bytes) -> int:
     """Compute Modbus ASCII LRC (two's complement of sum of bytes)."""
-    return (-(sum(data)) & 0xFF)
+    return -(sum(data)) & 0xFF
 
 
 def _build_read_frame(device_id: int, start_reg: int, qty: int) -> bytes:
     """Build a Modbus ASCII read-frame string (without leading ':' / CRLF)."""
-    payload = bytes([device_id, 0x03, (start_reg >> 8) & 0xFF, start_reg & 0xFF,
-                     (qty >> 8) & 0xFF, qty & 0xFF])
+    payload = bytes(
+        [
+            device_id,
+            0x03,
+            (start_reg >> 8) & 0xFF,
+            start_reg & 0xFF,
+            (qty >> 8) & 0xFF,
+            qty & 0xFF,
+        ]
+    )
     lrc = _lrc(payload)
     hex_body = payload.hex().upper() + f"{lrc:02X}"
     return f":{hex_body}\r\n".encode("ascii")
@@ -361,10 +391,17 @@ def _build_write_frame(device_id: int, start_reg: int, values: list[int]) -> byt
     """Build a Modbus ASCII write-frame (function 0x10)."""
     qty = len(values)
     byte_count = qty * 2
-    header = bytes([device_id, 0x10,
-                    (start_reg >> 8) & 0xFF, start_reg & 0xFF,
-                    (qty >> 8) & 0xFF, qty & 0xFF,
-                    byte_count])
+    header = bytes(
+        [
+            device_id,
+            0x10,
+            (start_reg >> 8) & 0xFF,
+            start_reg & 0xFF,
+            (qty >> 8) & 0xFF,
+            qty & 0xFF,
+            byte_count,
+        ]
+    )
     value_bytes = b""
     for v in values:
         value_bytes += struct.pack(">H", v)
@@ -397,7 +434,7 @@ def _parse_response(raw: bytes) -> list[int]:
     func_code = raw_bytes[1]
     if func_code & 0x80:
         exception = raw_bytes[2] if len(raw_bytes) > 2 else 0
-        raise ValueError(f"Modbus error response – exception code 0x{exception:02X}")
+        raise ValueError(f"Modbus error response - exception code 0x{exception:02X}")
 
     # Verify LRC
     body = bytes.fromhex(text)
@@ -410,10 +447,10 @@ def _parse_response(raw: bytes) -> list[int]:
 
     # Read-response: device_id + 0x03 + byte_count + data... + lrc
     byte_count = raw_bytes[2]
-    data = raw_bytes[3: 3 + byte_count]
+    data = raw_bytes[3 : 3 + byte_count]
     registers: list[int] = []
     for i in range(0, len(data), 2):
-        registers.append(struct.unpack(">H", data[i:i+2])[0])
+        registers.append(struct.unpack(">H", data[i : i + 2])[0])
     return registers
 
 
@@ -421,12 +458,15 @@ def _parse_response(raw: bytes) -> list[int]:
 # Transport abstraction
 # ===========================================================================
 
+
 class _SerialTransport:
     """Send/receive over a real RS485 serial port."""
 
     def __init__(self, port: str, baudrate: int = 38400, timeout: float = 1.0):
         if not _HAS_SERIAL:
-            raise ImportError("pyserial is required for serial transport: pip install pyserial")
+            raise ImportError(
+                "pyserial is required for serial transport: pip install pyserial"
+            )
         self._ser = _serial.Serial(
             port=port,
             baudrate=baudrate,
@@ -452,7 +492,7 @@ class _SerialTransport:
                         break
                 if response:
                     return response.strip()
-            except Exception as exc:
+            except Exception:
                 if attempt == retries - 1:
                     raise
                 time.sleep(0.1 * (attempt + 1))
@@ -518,6 +558,7 @@ class _TCPTransport:
 # EMH1 Modbus ASCII client
 # ===========================================================================
 
+
 class EMH1ModbusASCII:
     """
     Communicate directly with ABL eMH1 wallboxes via Modbus ASCII (RS485).
@@ -532,7 +573,7 @@ class EMH1ModbusASCII:
         Use the convenience class-methods ``from_serial`` and ``from_tcp``.
     inter_frame_delay:
         Minimum delay (seconds) between consecutive requests.  The wallbox
-        sometimes needs to be 'woken up' – a small delay helps reliability.
+        sometimes needs to be 'woken up' - a small delay helps reliability.
     """
 
     # ABL-specific: responses start with '>' not ':'
@@ -547,15 +588,17 @@ class EMH1ModbusASCII:
     # ------------------------------------------------------------------
 
     @classmethod
-    def from_serial(cls, port: str, baudrate: int = 38400,
-                    timeout: float = 1.0, **kwargs) -> "EMH1ModbusASCII":
+    def from_serial(
+        cls, port: str, baudrate: int = 38400, timeout: float = 1.0, **kwargs
+    ) -> "EMH1ModbusASCII":
         """Create an instance using a local serial / USB-RS485 adapter."""
         transport = _SerialTransport(port, baudrate=baudrate, timeout=timeout)
         return cls(transport, **kwargs)
 
     @classmethod
-    def from_tcp(cls, host: str, port: int = 8899,
-                 timeout: float = 3.0, **kwargs) -> "EMH1ModbusASCII":
+    def from_tcp(
+        cls, host: str, port: int = 8899, timeout: float = 3.0, **kwargs
+    ) -> "EMH1ModbusASCII":
         """Create an instance using a transparent RS485-over-TCP gateway."""
         transport = _TCPTransport(host, port=port, timeout=timeout)
         return cls(transport, **kwargs)
@@ -574,7 +617,7 @@ class EMH1ModbusASCII:
         frame = _build_write_frame(device_id, start, values)
         time.sleep(self._delay)
         raw = self._transport.send_recv(frame)
-        _parse_response(raw)   # raises on error
+        _parse_response(raw)  # raises on error
 
     # ------------------------------------------------------------------
     # Public API  (mirrors the official Modbus register map)
@@ -689,7 +732,9 @@ class EMH1ModbusASCII:
         regs = self._read_registers(device_id, 0x0006, 2)
         ptr = (regs[0] >> 8) & 0xFF
         flags = ((regs[0] & 0xFF) << 16) | regs[1]
-        return SystemFlags(device_id=device_id, state_machine_pointer=ptr, raw_flags=flags)
+        return SystemFlags(
+            device_id=device_id, state_machine_pointer=ptr, raw_flags=flags
+        )
 
     def set_max_current(self, device_id: int = 1, amps: int = 16) -> None:
         """
@@ -698,12 +743,12 @@ class EMH1ModbusASCII:
         Parameters
         ----------
         device_id : int
-            Wallbox device ID (1–16, or 0 for broadcast).
+            Wallbox device ID (1-16, or 0 for broadcast).
         amps : int
-            Desired max current in amps (6–16 in 1 A steps, or 0 to disable).
+            Desired max current in amps (6-16 in 1 A steps, or 0 to disable).
         """
         if amps not in (0, *range(6, 17)):
-            raise ValueError(f"Invalid current {amps}A – must be 0 or 6..16")
+            raise ValueError(f"Invalid current {amps}A - must be 0 or 6..16")
         # Duty cycle: amps / 0.6 * 10 ≈ raw value
         # Per official spec table: 10A → 0x00A6, 16A → 0x0109 (duty cycle %)
         # Simpler: the raw word is just amps * 10 for the lower byte approach.
@@ -778,6 +823,7 @@ class EMH1ModbusASCII:
 # eMS Home HTTP client
 # ===========================================================================
 
+
 class EMSHomeHTTP:
     """
     HTTP client for the ABL eMS Home web interface.
@@ -802,35 +848,41 @@ class EMSHomeHTTP:
     use_https : bool
         Use HTTPS instead of HTTP (default False).
     verify_ssl : bool
-        Verify TLS certificate (default False – local devices use self-signed
+        Verify TLS certificate (default False - local devices use self-signed
         certs).
     timeout : float
         Per-request timeout in seconds (default 10).
     """
 
     # These credentials are hardcoded in the eMS Home firmware.
-    _CLIENT_ID     = "emos"
+    _CLIENT_ID = "emos"
     _CLIENT_SECRET = "56951025"
-    _USERNAME      = "admin"
-    _TOKEN_PATH    = "/api/web-login/token"
+    _USERNAME = "admin"
+    _TOKEN_PATH = "/api/web-login/token"
 
-    def __init__(self, host: str, password: str, port: int = 80,
-                 use_https: bool = False, verify_ssl: bool = False,
-                 timeout: float = 10.0):
+    def __init__(
+        self,
+        host: str,
+        password: str,
+        port: int = 80,
+        use_https: bool = False,
+        verify_ssl: bool = False,
+        timeout: float = 10.0,
+    ):
         if not _HAS_REQUESTS:
             raise ImportError("requests is required: pip install requests")
 
         scheme = "https" if use_https else "http"
-        self._base    = f"{scheme}://{host}:{port}"
+        self._base = f"{scheme}://{host}:{port}"
         self._password = password
-        self._timeout  = timeout
+        self._timeout = timeout
 
         self._session: Session = requests.Session()
         self._session.verify = verify_ssl
 
         # Token state
         self._access_token: Optional[str] = None
-        self._token_expires_at: float = 0.0   # UNIX timestamp
+        self._token_expires_at: float = 0.0  # UNIX timestamp
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -838,8 +890,9 @@ class EMSHomeHTTP:
 
     def _is_token_valid(self) -> bool:
         """Return True if we have a token that won't expire in the next 60 s."""
-        return (self._access_token is not None and
-                time.time() < self._token_expires_at - 60)
+        return (
+            self._access_token is not None and time.time() < self._token_expires_at - 60
+        )
 
     def _apply_auth(self) -> None:
         """Ensure the session has a valid Bearer token, refreshing if needed."""
@@ -848,22 +901,21 @@ class EMSHomeHTTP:
 
     def _get(self, path: str, **kwargs) -> "requests.Response":
         self._apply_auth()
-        resp = self._session.get(f"{self._base}{path}",
-                                 timeout=self._timeout, **kwargs)
+        resp = self._session.get(f"{self._base}{path}", timeout=self._timeout, **kwargs)
         resp.raise_for_status()
         return resp
 
     def _post(self, path: str, **kwargs) -> "requests.Response":
         self._apply_auth()
-        resp = self._session.post(f"{self._base}{path}",
-                                  timeout=self._timeout, **kwargs)
+        resp = self._session.post(
+            f"{self._base}{path}", timeout=self._timeout, **kwargs
+        )
         resp.raise_for_status()
         return resp
 
     def _put(self, path: str, **kwargs) -> "requests.Response":
         self._apply_auth()
-        resp = self._session.put(f"{self._base}{path}",
-                                 timeout=self._timeout, **kwargs)
+        resp = self._session.put(f"{self._base}{path}", timeout=self._timeout, **kwargs)
         resp.raise_for_status()
         return resp
 
@@ -891,24 +943,22 @@ class EMSHomeHTTP:
         """
         url = f"{self._base}{self._TOKEN_PATH}"
         data = {
-            "grant_type":    "password",
-            "client_id":     self._CLIENT_ID,
+            "grant_type": "password",
+            "client_id": self._CLIENT_ID,
             "client_secret": self._CLIENT_SECRET,
-            "username":      self._USERNAME,
-            "password":      self._password,
+            "username": self._USERNAME,
+            "password": self._password,
         }
         resp = self._session.post(url, data=data, timeout=self._timeout)
         resp.raise_for_status()
 
         token_data = resp.json()
-        self._access_token    = token_data["access_token"]
-        expires_in            = int(token_data.get("expires_in", 604800))
+        self._access_token = token_data["access_token"]
+        expires_in = int(token_data.get("expires_in", 604800))
         self._token_expires_at = time.time() + expires_in
 
         # Attach the token to all future requests in this session
-        self._session.headers.update(
-            {"Authorization": f"Bearer {self._access_token}"}
-        )
+        self._session.headers.update({"Authorization": f"Bearer {self._access_token}"})
         return token_data
 
     def logout(self) -> None:
@@ -917,7 +967,7 @@ class EMSHomeHTTP:
         The eMS Home does not have a server-side token-revocation endpoint,
         so this is purely a client-side operation.
         """
-        self._access_token     = None
+        self._access_token = None
         self._token_expires_at = 0.0
         self._session.headers.pop("Authorization", None)
 
@@ -989,9 +1039,12 @@ class EMSHomeHTTP:
         raw = self._get("/api/e-mobility/config/chargemode").json()
         return ChargeModeConfig.from_dict(raw)
 
-    def set_charge_mode(self, mode: str,
-                        min_charging_power_quota: Optional[int] = None,
-                        min_pv_power_quota: int = 0) -> ChargeModeConfig:
+    def set_charge_mode(
+        self,
+        mode: str,
+        min_charging_power_quota: Optional[int] = None,
+        min_pv_power_quota: int = 0,
+    ) -> ChargeModeConfig:
         """
         Set the charge mode.
 
@@ -1017,7 +1070,9 @@ class EMSHomeHTTP:
             ems.set_charge_mode(ChargeMode.HYBRID, min_pv_power_quota=60)
         """
         if min_pv_power_quota < 0 or min_pv_power_quota > 100:
-            raise ValueError(f"min_pv_power_quota must be 0–100, got {min_pv_power_quota}")
+            raise ValueError(
+                f"min_pv_power_quota must be 0-100, got {min_pv_power_quota}"
+            )
         payload = {
             "mode": mode,
             "mincharginpowerquota": min_charging_power_quota,
@@ -1042,10 +1097,11 @@ class EMSHomeHTTP:
         ----------
         min_pv_power_quota : int
             Minimum PV surplus percentage required before charging starts
-            (0–100, default 100).
+            (0-100, default 100).
         """
-        return self.set_charge_mode(ChargeMode.PV,
-                                    min_pv_power_quota=min_pv_power_quota)
+        return self.set_charge_mode(
+            ChargeMode.PV, min_pv_power_quota=min_pv_power_quota
+        )
 
     def enable_hybrid_charging(self, min_pv_power_quota: int = 100) -> ChargeModeConfig:
         """
@@ -1055,12 +1111,14 @@ class EMSHomeHTTP:
         ----------
         min_pv_power_quota : int
             Minimum PV surplus percentage before grid top-up kicks in
-            (0–100, default 100). The slider in the UI confirmed values
+            (0-100, default 100). The slider in the UI confirmed values
             between 0 and 100 are accepted.
         """
-        return self.set_charge_mode(ChargeMode.HYBRID,
-                                    min_charging_power_quota=0,
-                                    min_pv_power_quota=min_pv_power_quota)
+        return self.set_charge_mode(
+            ChargeMode.HYBRID,
+            min_charging_power_quota=0,
+            min_pv_power_quota=min_pv_power_quota,
+        )
 
     def get_ev_parameter_list(self) -> list[EVParameters]:
         """
@@ -1078,8 +1136,7 @@ class EMSHomeHTTP:
                 print(ev.uuid, ev.max_current, ev.active_phases)
         """
         raw = self._get("/api/e-mobility/evparameterlist").json()
-        return [EVParameters.from_dict(uuid, params)
-                for uuid, params in raw.items()]
+        return [EVParameters.from_dict(uuid, params) for uuid, params in raw.items()]
 
     # ------------------------------------------------------------------
     # System information
@@ -1123,7 +1180,7 @@ class EMSHomeHTTP:
         return self._get("/api/energy").json()
 
     # ------------------------------------------------------------------
-    # Discovery helper – use this to find the real endpoint paths
+    # Discovery helper - use this to find the real endpoint paths
     # ------------------------------------------------------------------
 
     def explore(self, path: str) -> dict | list | str:
@@ -1162,19 +1219,20 @@ class EMSHomeHTTP:
         device_id : int
             Wallbox number as shown in the eMS Home dashboard.
         amps : int
-            Desired maximum current (0 to disable, or 6–16 A).
+            Desired maximum current (0 to disable, or 6-16 A).
 
         Endpoint: POST /api/devices/{device_id}/current
         """
         if amps not in (0, *range(6, 17)):
-            raise ValueError(f"Invalid current {amps} A – must be 0 or 6..16")
+            raise ValueError(f"Invalid current {amps} A - must be 0 or 6..16")
         return self._post(
             f"/api/devices/{device_id}/current",
             json={"max_current": amps},
         ).json()
 
-    def set_load_management(self, enabled: bool,
-                            max_total_amps: Optional[int] = None) -> dict:
+    def set_load_management(
+        self, enabled: bool, max_total_amps: Optional[int] = None
+    ) -> dict:
         """
         Enable or disable the eMS Home dynamic load-management feature.
 
@@ -1240,6 +1298,7 @@ class EMSHomeHTTP:
 # Convenience wrapper
 # ===========================================================================
 
+
 class ABLEMSHome:
     """
     Unified wrapper combining the HTTP and Modbus interfaces.
@@ -1262,10 +1321,14 @@ class ABLEMSHome:
         TCP port for the RS485 gateway (default 8899).
     """
 
-    def __init__(self, host: str, password: str,
-                 modbus_serial: Optional[str] = None,
-                 modbus_host: Optional[str] = None,
-                 modbus_port: int = 8899):
+    def __init__(
+        self,
+        host: str,
+        password: str,
+        modbus_serial: Optional[str] = None,
+        modbus_host: Optional[str] = None,
+        modbus_port: int = 8899,
+    ):
         self.http = EMSHomeHTTP(host, password)
         self.modbus: Optional[EMH1ModbusASCII] = None
 
@@ -1306,19 +1369,24 @@ class ABLEMSHome:
 # CLI
 # ===========================================================================
 
+
 def _http_args(p):
     """Attach the shared --host / --password arguments to a subparser."""
-    p.add_argument("--host",     required=True, help="eMS Home hostname or IP, e.g. ems-home-12345678")
+    p.add_argument(
+        "--host", required=True, help="eMS Home hostname or IP, e.g. ems-home-12345678"
+    )
     p.add_argument("--password", required=True, help="Password from the rating plate")
-    p.add_argument("--port",     type=int, default=80, help="HTTP port (default 80)")
+    p.add_argument("--port", type=int, default=80, help="HTTP port (default 80)")
 
 
 def _modbus_args(p):
     """Attach shared Modbus transport arguments to a subparser."""
     g = p.add_mutually_exclusive_group(required=True)
-    g.add_argument("--serial",   help="Serial port, e.g. /dev/ttyUSB0")
+    g.add_argument("--serial", help="Serial port, e.g. /dev/ttyUSB0")
     g.add_argument("--tcp-host", help="RS485-over-TCP gateway host")
-    p.add_argument("--tcp-port", type=int, default=8899, help="TCP gateway port (default 8899)")
+    p.add_argument(
+        "--tcp-port", type=int, default=8899, help="TCP gateway port (default 8899)"
+    )
 
 
 def _make_modbus(args) -> EMH1ModbusASCII:
@@ -1372,7 +1440,7 @@ def _fmt_ev_list(evs: list) -> str:
         probed = "yes" if ev.probing_successful else "no"
         lines += [
             f"  UUID     : {ev.uuid}",
-            f"  Current  : {ev.min_current}–{ev.max_current} A",
+            f"  Current  : {ev.min_current}-{ev.max_current} A",
             f"  Phases   : {phases}",
             f"  Probed   : {probed}",
             "",
@@ -1384,7 +1452,6 @@ def _run_smart_meter_cli(host: str, port: int, token: str, timeout: float) -> No
     """Connect to the smart meter WebSocket, print one reading, then exit."""
     import asyncio
     import base64
-    import hashlib
     import os
     import struct as _struct
     import datetime
@@ -1392,30 +1459,40 @@ def _run_smart_meter_cli(host: str, port: int, token: str, timeout: float) -> No
     WS_PATH = "/api/data-transfer/ws/protobuf/gdr/local/values/smart-meter"
 
     CH = {
-        0x100010400FF: ("Grid power total",    "W",   1000),
-        0x100090400FF: ("Grid apparent power", "W",   1000),
-        0x100150400FF: ("Active power L1",     "W",   1000),
-        0x100290400FF: ("Active power L2",     "W",   1000),
-        0x1003D0400FF: ("Active power L3",     "W",   1000),
-        0x1001D0400FF: ("Apparent power L1",   "W",   1000),
-        0x100310400FF: ("Apparent power L2",   "W",   1000),
-        0x100450400FF: ("Apparent power L3",   "W",   1000),
-        0x100200400FF: ("Voltage L1",          "V",   1000),
-        0x100340400FF: ("Voltage L2",          "V",   1000),
-        0x100480400FF: ("Voltage L3",          "V",   1000),
-        0x1001F0400FF: ("Current L1",          "A",   1000),
-        0x100330400FF: ("Current L2",          "A",   1000),
-        0x100470400FF: ("Current L3",          "A",   1000),
-        0x1000E0400FF: ("Frequency",           "Hz",  1000),
+        0x100010400FF: ("Grid power total", "W", 1000),
+        0x100090400FF: ("Grid apparent power", "W", 1000),
+        0x100150400FF: ("Active power L1", "W", 1000),
+        0x100290400FF: ("Active power L2", "W", 1000),
+        0x1003D0400FF: ("Active power L3", "W", 1000),
+        0x1001D0400FF: ("Apparent power L1", "W", 1000),
+        0x100310400FF: ("Apparent power L2", "W", 1000),
+        0x100450400FF: ("Apparent power L3", "W", 1000),
+        0x100200400FF: ("Voltage L1", "V", 1000),
+        0x100340400FF: ("Voltage L2", "V", 1000),
+        0x100480400FF: ("Voltage L3", "V", 1000),
+        0x1001F0400FF: ("Current L1", "A", 1000),
+        0x100330400FF: ("Current L2", "A", 1000),
+        0x100470400FF: ("Current L3", "A", 1000),
+        0x1000E0400FF: ("Frequency", "Hz", 1000),
         0x100010800FF: ("Energy import total", "kWh", 1e6),
     }
     ORDER = [
-        "Grid power total", "Grid apparent power",
-        "Active power L1", "Active power L2", "Active power L3",
-        "Apparent power L1", "Apparent power L2", "Apparent power L3",
-        "Voltage L1", "Voltage L2", "Voltage L3",
-        "Current L1", "Current L2", "Current L3",
-        "Frequency", "Energy import total",
+        "Grid power total",
+        "Grid apparent power",
+        "Active power L1",
+        "Active power L2",
+        "Active power L3",
+        "Apparent power L1",
+        "Apparent power L2",
+        "Apparent power L3",
+        "Voltage L1",
+        "Voltage L2",
+        "Voltage L3",
+        "Current L1",
+        "Current L2",
+        "Current L3",
+        "Frequency",
+        "Energy import total",
     ]
 
     # --- raw asyncio WS helpers ---
@@ -1459,16 +1536,16 @@ def _run_smart_meter_cli(host: str, port: int, token: str, timeout: float) -> No
         return reader, writer
 
     async def _ws_recv(reader):
-        header  = await reader.readexactly(2)
-        opcode  = header[0] & 0x0F
-        masked  = (header[1] & 0x80) != 0
-        length  = header[1] & 0x7F
+        header = await reader.readexactly(2)
+        opcode = header[0] & 0x0F
+        masked = (header[1] & 0x80) != 0
+        length = header[1] & 0x7F
         if length == 126:
             length = _struct.unpack(">H", await reader.readexactly(2))[0]
         elif length == 127:
             length = _struct.unpack(">Q", await reader.readexactly(8))[0]
         mask_key = await reader.readexactly(4) if masked else b""
-        payload  = await reader.readexactly(length)
+        payload = await reader.readexactly(length)
         if masked:
             payload = bytes(b ^ mask_key[i % 4] for i, b in enumerate(payload))
         if opcode == 0x8:
@@ -1482,7 +1559,8 @@ def _run_smart_meter_cli(host: str, port: int, token: str, timeout: float) -> No
     def _varint(data, pos):
         result, shift = 0, 0
         while True:
-            b = data[pos]; pos += 1
+            b = data[pos]
+            pos += 1
             result |= (b & 0x7F) << shift
             if not (b & 0x80):
                 break
@@ -1498,34 +1576,39 @@ def _run_smart_meter_cli(host: str, port: int, token: str, timeout: float) -> No
                 break
             fn, wt = tag >> 3, tag & 7
             if wt == 0:
-                v, pos = _varint(data, pos); out.append((fn, wt, v))
+                v, pos = _varint(data, pos)
+                out.append((fn, wt, v))
             elif wt == 2:
                 l, pos = _varint(data, pos)
-                out.append((fn, wt, data[pos:pos+l])); pos += l
+                out.append((fn, wt, data[pos : pos + l]))
+                pos += l
             elif wt == 5:
-                v = _struct.unpack_from("<I", data, pos)[0]; pos += 4
+                v = _struct.unpack_from("<I", data, pos)[0]
+                pos += 4
                 out.append((fn, wt, v))
             else:
                 break
         return out
 
     def _decode(raw):
-        outer   = _fields(raw)
-        wrap    = next((v for fn, wt, v in outer if fn == 1 and wt == 2), None)
-        if not wrap: return None
+        outer = _fields(raw)
+        wrap = next((v for fn, wt, v in outer if fn == 1 and wt == 2), None)
+        if not wrap:
+            return None
         payload = next((v for fn, wt, v in _fields(wrap) if fn == 2 and wt == 2), None)
-        if not payload: return None
+        if not payload:
+            return None
         ts, values = 0.0, {}
         for fn, wt, v in _fields(payload):
             if fn == 3 and wt == 2:
                 tsf = _fields(v)
                 sec = next((val for f, _, val in tsf if f == 1), 0)
-                ns  = next((val for f, _, val in tsf if f == 2), 0)
-                ts  = sec + ns / 1e9
+                ns = next((val for f, _, val in tsf if f == 2), 0)
+                ts = sec + ns / 1e9
             elif fn == 4 and wt == 2:
-                dp  = _fields(v)
-                ch  = next((val for f, _, val in dp if f == 1), None)
-                rv  = next((val for f, _, val in dp if f == 2), None)
+                dp = _fields(v)
+                ch = next((val for f, _, val in dp if f == 1), None)
+                rv = next((val for f, _, val in dp if f == 2), None)
                 if ch in CH and rv is not None:
                     label, unit, div = CH[ch]
                     values[label] = (rv / div, unit)
@@ -1555,7 +1638,11 @@ def _run_smart_meter_cli(host: str, port: int, token: str, timeout: float) -> No
             print("Error: could not decode frame")
             return
         ts, values = result
-        dt = datetime.datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S") if ts else "unknown"
+        dt = (
+            datetime.datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
+            if ts
+            else "unknown"
+        )
         print(f"Smart meter reading  ({dt})")
         print(f"  {'Measurement':<24} {'Value':>10}  Unit")
         print(f"  {'-'*44}")
@@ -1588,7 +1675,8 @@ Modbus commands (require --serial or --tcp-host):
   scan               Scan the RS485 bus for connected wallboxes
   wb-status          Read firmware + live current from a wallbox
   set-current        Set the maximum charge current on a wallbox
-""")
+""",
+    )
 
     sub = parser.add_subparsers(dest="cmd", metavar="COMMAND")
 
@@ -1622,8 +1710,10 @@ Modbus commands (require --serial or --tcp-host):
     )
     p.add_argument(
         "--pv-quota",
-        type=int, default=100, metavar="PCT",
-        help="Min PV surplus %% required before charging (0–100, used with pv/hybrid, default 100)",
+        type=int,
+        default=100,
+        metavar="PCT",
+        help="Min PV surplus %% required before charging (0-100, used with pv/hybrid, default 100)",
     )
 
     # ------------------------------------------------------------------ #
@@ -1642,10 +1732,15 @@ Modbus commands (require --serial or --tcp-host):
     # ------------------------------------------------------------------ #
     # HTTP: smart-meter                                                    #
     # ------------------------------------------------------------------ #
-    p = sub.add_parser("smart-meter", help="Print one live smart meter reading via WebSocket")
+    p = sub.add_parser(
+        "smart-meter", help="Print one live smart meter reading via WebSocket"
+    )
     _http_args(p)
     p.add_argument(
-        "--timeout", type=float, default=10.0, metavar="SEC",
+        "--timeout",
+        type=float,
+        default=10.0,
+        metavar="SEC",
         help="Seconds to wait for first frame (default 10)",
     )
 
@@ -1667,8 +1762,10 @@ Modbus commands (require --serial or --tcp-host):
     # ------------------------------------------------------------------ #
     p = sub.add_parser("set-current", help="Set max charge current on a wallbox")
     _modbus_args(p)
-    p.add_argument("--id",   type=int, required=True, help="Wallbox device ID")
-    p.add_argument("--amps", type=int, required=True, help="Max current in amps (0 or 6–16)")
+    p.add_argument("--id", type=int, required=True, help="Wallbox device ID")
+    p.add_argument(
+        "--amps", type=int, required=True, help="Max current in amps (0 or 6-16)"
+    )
 
     # ------------------------------------------------------------------ #
     # Dispatch                                                             #
@@ -1679,8 +1776,15 @@ Modbus commands (require --serial or --tcp-host):
         parser.print_help()
         raise SystemExit(0)
 
-    HTTP_CMDS   = {"device-status", "charging-state", "charge-mode",
-                   "set-mode", "ev-list", "explore", "smart-meter"}
+    HTTP_CMDS = {
+        "device-status",
+        "charging-state",
+        "charge-mode",
+        "set-mode",
+        "ev-list",
+        "explore",
+        "smart-meter",
+    }
     MODBUS_CMDS = {"scan", "wb-status", "set-current"}
 
     if args.cmd in HTTP_CMDS:
@@ -1706,10 +1810,12 @@ Modbus commands (require --serial or --tcp-host):
 
             elif args.cmd == "set-mode":
                 if args.mode in (ChargeMode.PV, ChargeMode.HYBRID):
-                    cfg = ems.set_charge_mode(args.mode, min_pv_power_quota=args.pv_quota)
+                    cfg = ems.set_charge_mode(
+                        args.mode, min_pv_power_quota=args.pv_quota
+                    )
                 else:
                     cfg = ems.set_charge_mode(args.mode)
-                print(f"Charge mode updated:")
+                print("Charge mode updated:")
                 print(_fmt_chargemode(cfg))
 
             elif args.cmd == "ev-list":
@@ -1719,11 +1825,16 @@ Modbus commands (require --serial or --tcp-host):
 
             elif args.cmd == "explore":
                 import json as _json
+
                 result = ems.explore(args.path)
-                print(_json.dumps(result, indent=2) if isinstance(result, (dict, list)) else result)
+                print(
+                    _json.dumps(result, indent=2)
+                    if isinstance(result, (dict, list))
+                    else result
+                )
 
             elif args.cmd == "smart-meter":
-                import asyncio as _asyncio
+
                 _run_smart_meter_cli(args.host, args.port, ems.token, args.timeout)
 
         except Exception as exc:
@@ -1751,7 +1862,9 @@ Modbus commands (require --serial or --tcp-host):
                 fw = wb.read_firmware(args.id)
                 cr = wb.read_current(args.id)
                 print(f"Wallbox device {args.id}:")
-                print(f"  Firmware  : v{fw.firmware_major}.{fw.firmware_minor} ({fw.hardware_revision})")
+                print(
+                    f"  Firmware  : v{fw.firmware_major}.{fw.firmware_minor} ({fw.hardware_revision})"
+                )
                 print(f"  State     : {cr.state.name} (0x{cr.state.value:02X})")
                 print(f"  Icmax     : {cr.max_current_amps} A")
                 print(f"  Phase 1   : {cr.phase1_amps} A")

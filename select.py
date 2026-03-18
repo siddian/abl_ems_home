@@ -1,4 +1,5 @@
 """Select and Number platforms for ABL eMS Home charge mode control."""
+
 from __future__ import annotations
 
 import logging
@@ -29,9 +30,9 @@ CHARGE_MODE_OPTIONS = [
 ]
 
 CHARGE_MODE_ICONS = {
-    ChargeMode.LOCK:   "mdi:lock",
-    ChargeMode.GRID:   "mdi:transmission-tower",
-    ChargeMode.PV:     "mdi:solar-power",
+    ChargeMode.LOCK: "mdi:lock",
+    ChargeMode.GRID: "mdi:transmission-tower",
+    ChargeMode.PV: "mdi:solar-power",
     ChargeMode.HYBRID: "mdi:solar-power-variant",
 }
 
@@ -54,17 +55,22 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up ABL eMS Home select and number entities."""
-    coordinator: ABLEMSHomeCoordinator = hass.data[DOMAIN][entry.entry_id][DATA_COORDINATOR]
+    coordinator: ABLEMSHomeCoordinator = hass.data[DOMAIN][entry.entry_id][
+        DATA_COORDINATOR
+    ]
 
-    async_add_entities([
-        ABLChargeModeSelect(coordinator, entry),
-        ABLPVQuotaNumber(coordinator, entry),
-    ])
+    async_add_entities(
+        [
+            ABLChargeModeSelect(coordinator, entry),
+            ABLPVQuotaNumber(coordinator, entry),
+        ]
+    )
 
 
 # ---------------------------------------------------------------------------
 # Charge mode selector
 # ---------------------------------------------------------------------------
+
 
 class ABLChargeModeSelect(CoordinatorEntity[ABLEMSHomeCoordinator], SelectEntity):
     """Dropdown to select the active charge mode."""
@@ -119,6 +125,7 @@ class ABLChargeModeSelect(CoordinatorEntity[ABLEMSHomeCoordinator], SelectEntity
 # PV quota number slider
 # ---------------------------------------------------------------------------
 
+
 class ABLPVQuotaNumber(CoordinatorEntity[ABLEMSHomeCoordinator], NumberEntity):
     """
     Slider (0–100 %) for the minimum PV surplus quota.
@@ -167,7 +174,9 @@ class ABLPVQuotaNumber(CoordinatorEntity[ABLEMSHomeCoordinator], NumberEntity):
         data = self.coordinator.data
         current_mode = data.charge_mode.mode if data else ChargeMode.HYBRID
 
-        await self.hass.async_add_executor_job(self._set_quota, current_mode, int(value))
+        await self.hass.async_add_executor_job(
+            self._set_quota, current_mode, int(value)
+        )
         await self.coordinator.async_request_refresh()
 
     def _set_quota(self, mode: str, quota: int) -> None:

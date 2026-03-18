@@ -1,4 +1,5 @@
 """Config flow for ABL eMS Home integration."""
+
 from __future__ import annotations
 
 import voluptuous as vol
@@ -17,6 +18,7 @@ from .const import (
     DOMAIN,
 )
 
+
 # Inline import so we don't need to install the library at import time
 def _try_login(host: str, password: str, port: int) -> str | None:
     """
@@ -25,6 +27,7 @@ def _try_login(host: str, password: str, port: int) -> str | None:
     """
     try:
         from .abl_ems_home import EMSHomeHTTP
+
         ems = EMSHomeHTTP(host, password, port=port)
         ems.login()
         ems.logout()
@@ -41,15 +44,13 @@ class ABLEMSHomeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     VERSION = 1
 
-    async def async_step_user(
-        self, user_input: dict | None = None
-    ) -> FlowResult:
+    async def async_step_user(self, user_input: dict | None = None) -> FlowResult:
         errors: dict[str, str] = {}
 
         if user_input is not None:
-            host     = user_input[CONF_HOST].strip()
+            host = user_input[CONF_HOST].strip()
             password = user_input[CONF_PASSWORD]
-            port     = user_input.get(CONF_PORT, DEFAULT_PORT)
+            port = user_input.get(CONF_PORT, DEFAULT_PORT)
 
             # Prevent duplicate entries for the same host
             await self.async_set_unique_id(f"{host}:{port}")
@@ -63,9 +64,9 @@ class ABLEMSHomeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return self.async_create_entry(
                     title=f"ABL eMS Home ({host})",
                     data={
-                        CONF_HOST:          host,
-                        CONF_PASSWORD:      password,
-                        CONF_PORT:          port,
+                        CONF_HOST: host,
+                        CONF_PASSWORD: password,
+                        CONF_PORT: port,
                         CONF_SCAN_INTERVAL: user_input.get(
                             CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
                         ),
@@ -102,9 +103,7 @@ class ABLEMSHomeOptionsFlow(config_entries.OptionsFlow):
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         self._config_entry = config_entry
 
-    async def async_step_init(
-        self, user_input: dict | None = None
-    ) -> FlowResult:
+    async def async_step_init(self, user_input: dict | None = None) -> FlowResult:
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
